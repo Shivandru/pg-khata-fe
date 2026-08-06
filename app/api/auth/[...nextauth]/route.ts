@@ -14,6 +14,11 @@ const handler = NextAuth({
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      authorization: {
+        params: {
+          scope: "openid email profile",
+        },
+      },
     }),
   ],
   callbacks: {
@@ -42,10 +47,7 @@ const handler = NextAuth({
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            name: token.name,
-            email: token.email,
-            role: "owner",
-            provider: "google",
+            idToken: account.id_token,
           }),
         });
 
