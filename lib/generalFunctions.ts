@@ -1,5 +1,3 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "./auth";
 class GeneralFunction {
   private BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -21,7 +19,15 @@ class GeneralFunction {
     url: string;
     options: RequestInit;
   }> {
-    const session = await getServerSession(authOptions);
+    let session = null;
+    if (typeof window === "undefined") {
+      const { getServerSession } = await import("next-auth");
+      const { authOptions } = await import("./auth");
+      session = await getServerSession(authOptions);
+    } else {
+      const { getSession } = await import("next-auth/react");
+      session = await getSession();
+    }
 
     const headers = new Headers(init.headers);
 

@@ -21,6 +21,7 @@ export const authOptions: NextAuthOptions = {
         name: token.name ?? "",
         email: token.email ?? "",
         image: token.picture ?? null,
+        role: token.role as "owner" | "guest" | null,
       };
 
       session.accessToken = token.backendAccessToken as string;
@@ -28,11 +29,24 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
 
-    async redirect() {
-      return "/dashboard";
+    async redirect({ url, baseUrl }) {
+      // Honor explicit callbackUrl, fall back to baseUrl (/)
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      if (new URL(url).origin === baseUrl) return url;
+      return baseUrl;
     },
 
-    async jwt({ token, account, profile }) {
+    async jwt({ token, account, profile, trigger, session }) {
+      if (trigger === "update" && session) {
+        if (session.accessToken) {
+          token.backendAccessToken = session.accessToken;
+        }
+        if (session.role !== undefined) {
+          token.role = session.role;
+        }
+        return token;
+      }
+
       if (account && profile) {
         const url = `${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/signup`;
 
@@ -50,6 +64,9 @@ export const authOptions: NextAuthOptions = {
 
         token.userId = data.user.userId;
         token.backendAccessToken = data.token;
+        token.role = data.user.role;
+        console.log("Backend token:", data.token);
+        console.log("Stored token:", token.backendAccessToken);
       }
 
       return token;

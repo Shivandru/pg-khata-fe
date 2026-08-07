@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, DoorOpen, Users, CreditCard, Building2 } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { LayoutDashboard, DoorOpen, Users, CreditCard, Building2, User } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -14,15 +15,27 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
-const items = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Rooms & Beds", url: "/rooms", icon: DoorOpen },
-  { title: "Guests", url: "/guest", icon: Users },
-  { title: "Payments", url: "/payments", icon: CreditCard },
-];
-
 export function AppSidebar() {
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const role = session?.user?.role;
+  const userName = session?.user?.name ?? "User";
+
+  const ownerItems = [
+    { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    { title: "Rooms & Beds", url: "/rooms", icon: DoorOpen },
+    { title: "Guests", url: "/guest", icon: Users },
+    { title: "Payments", url: "/payments", icon: CreditCard },
+  ];
+
+  const guestItems = [
+    { title: "Tenancy Details", url: "/tenancy", icon: DoorOpen },
+    { title: "Payment History", url: "/payment-history", icon: CreditCard },
+    { title: "Profile Settings", url: "/profile", icon: User },
+  ];
+
+  const currentItems = role === "guest" ? guestItems : ownerItems;
+
   const isActive = (url: string) =>
     url === "/" ? pathname === "/" : pathname.startsWith(url);
 
@@ -35,7 +48,9 @@ export function AppSidebar() {
           </div>
           <div className="flex flex-col group-data-[collapsible=icon]:hidden">
             <span className="text-sm font-semibold tracking-tight">Nest PG</span>
-            <span className="text-[11px] text-muted-foreground">Admin</span>
+            <span className="text-[11px] text-muted-foreground capitalize">
+              {role ?? "Loading..."} - {userName}
+            </span>
           </div>
         </div>
       </SidebarHeader>
@@ -43,7 +58,7 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => (
+              {currentItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
                     <Link href={item.url} className="flex items-center gap-2">

@@ -6,7 +6,7 @@ import { GoogleButton } from "./GoogleButton";
 
 export default function SignUpForm() {
   const handleGoogleLogin = async () => {
-    signIn("google", { callbackUrl: "/dashboard" });
+    signIn("google", { callbackUrl: "/" });
   };
 
   return (

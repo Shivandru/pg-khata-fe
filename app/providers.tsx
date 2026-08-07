@@ -1,24 +1,30 @@
 "use client";
 
+import { useState } from "react";
 import { StoreProvider } from "@/lib/store";
-import { SidebarProvider } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/app-sidebar";
-import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
+import { SessionProvider } from "next-auth/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            refetchOnWindowFocus: false,
+            retry: false,
+          },
+        },
+      })
+  );
+
   return (
-    <StoreProvider>
-      {/* <SidebarProvider> */}
-        {/* <AppSidebar /> */}
-        {/* <SidebarInset> */}
-          {/* <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
-            <SidebarTrigger className="-ml-1" />
-          </header> */}
-          {/* <main className="flex-1 overflow-auto p-6"> */}
-            {children}
-          {/* </main> */}
-        {/* </SidebarInset> */}
-      {/* </SidebarProvider> */}
-    </StoreProvider>
+    <SessionProvider>
+      <QueryClientProvider client={queryClient}>
+        <StoreProvider>
+          {children}
+        </StoreProvider>
+      </QueryClientProvider>
+    </SessionProvider>
   );
 }
