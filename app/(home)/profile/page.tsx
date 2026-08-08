@@ -53,6 +53,7 @@ export default function ProfilePage() {
   });
 
   const role = session?.user?.role ?? "—";
+  const avatarUrl = session?.user?.image ?? null;
   const avatarInitials = (guest?.name ?? session?.user?.name ?? "?")
     .split(" ")
     .slice(0, 2)
@@ -82,8 +83,13 @@ export default function ProfilePage() {
       <Card className="rounded-xl border shadow-none overflow-hidden">
         <div className="bg-gradient-to-r from-primary/20 via-primary/10 to-transparent h-20" />
         <div className="px-6 pb-6 -mt-10">
-          <div className="inline-flex h-20 w-20 items-center justify-center rounded-full bg-primary text-primary-foreground text-2xl font-bold shadow-lg ring-4 ring-background">
-            {avatarInitials}
+          <div className="inline-flex h-20 w-20 items-center justify-center rounded-full overflow-hidden bg-primary text-primary-foreground text-2xl font-bold shadow-lg ring-4 ring-background">
+            {avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={avatarUrl} alt={avatarInitials} className="h-full w-full object-cover" />
+            ) : (
+              <span>{avatarInitials}</span>
+            )}
           </div>
           <div className="mt-3">
             <h2 className="text-xl font-bold">{guest?.name ?? session?.user?.name}</h2>

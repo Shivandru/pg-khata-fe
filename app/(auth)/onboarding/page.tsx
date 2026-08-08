@@ -1,10 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { Building2, Users, ChevronRight, Plus, Trash2, ArrowLeft } from "lucide-react";
+import {
+  Building2,
+  Users,
+  ChevronRight,
+  Plus,
+  Trash2,
+  ArrowLeft,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,11 +27,32 @@ import { generalFunctions } from "@/lib/generalFunctions";
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Role = "owner" | "guest";
 
-interface Property { propertyId: string; name: string; address: string; }
-interface Room { roomId: string; roomNumber: string; floor: number; bedCount: number; occupiedCount: number; }
-interface Bed { bedId: string; label: string; isOccupied: boolean; }
-interface RoomEntry { roomNumber: string; floor: number; bedCount: number; }
-interface PricingEntry { bedCount: number; rentAmount: number; }
+interface Property {
+  propertyId: string;
+  name: string;
+  address: string;
+}
+interface Room {
+  roomId: string;
+  roomNumber: string;
+  floor: number;
+  bedCount: number;
+  occupiedCount: number;
+}
+interface Bed {
+  bedId: string;
+  label: string;
+  isOccupied: boolean;
+}
+interface RoomEntry {
+  roomNumber: string;
+  floor: number;
+  bedCount: number;
+}
+interface PricingEntry {
+  bedCount: number;
+  rentAmount: number;
+}
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
 async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -40,19 +68,23 @@ async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
 // ─── Step indicator ───────────────────────────────────────────────────────────
 function StepDot({ active, done }: { active: boolean; done: boolean }) {
   return (
-    <div className={`h-2.5 w-2.5 rounded-full transition-all duration-300 ${
-      done ? "bg-primary" : active ? "bg-primary scale-125" : "bg-muted"
-    }`} />
+    <div
+      className={`h-2.5 w-2.5 rounded-full transition-all duration-300 ${
+        done ? "bg-primary" : active ? "bg-primary scale-125" : "bg-muted"
+      }`}
+    />
   );
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function OnboardingPage() {
-  const { data: session, update: updateSession } = useSession();
+  const { data: session, status, update: updateSession } = useSession();
   const router = useRouter();
 
   // Step state
-  const [step, setStep] = useState<"role" | "owner-build" | "guest-tenancy">("role");
+  const [step, setStep] = useState<"role" | "owner-build" | "guest-tenancy">(
+    "role",
+  );
   const [role, setRole] = useState<Role | null>(null);
   const [phone, setPhone] = useState("");
   const [phoneError, setPhoneError] = useState("");
@@ -78,7 +110,7 @@ export default function OnboardingPage() {
   const [selectedRoomId, setSelectedRoomId] = useState("");
   const [selectedBedId, setSelectedBedId] = useState("");
   const [startDate, setStartDate] = useState(
-    new Date().toISOString().slice(0, 10)
+    new Date().toISOString().slice(0, 10),
   );
   const [tenancyError, setTenancyError] = useState("");
   const [isRegisteringTenancy, setIsRegisteringTenancy] = useState(false);
@@ -99,11 +131,74 @@ export default function OnboardingPage() {
   const { data: beds = [] } = useQuery<Bed[]>({
     queryKey: ["beds", selectedPropertyId, selectedRoomId],
     queryFn: () =>
-      apiRequest(`/properties/${selectedPropertyId}/rooms/${selectedRoomId}/beds`),
-    enabled: !!selectedPropertyId && !!selectedRoomId && step === "guest-tenancy",
+      apiRequest(
+        `/properties/${selectedPropertyId}/rooms/${selectedRoomId}/beds`,
+      ),
+    enabled:
+      !!selectedPropertyId && !!selectedRoomId && step === "guest-tenancy",
   });
 
   const availableBeds = beds.filter((b) => !b.isOccupied);
+
+  // ── Query to check if owner's property already exists ──
+  const { data: ownerProperty, isLoading: isCheckingProperty } =
+    useQuery<Property | null>({
+      queryKey: ["owner-property"],
+      queryFn: () => apiRequest("/properties/me"),
+      enabled: session?.user?.role === "owner",
+      retry: false,
+    });
+
+  // ── Query to check if guest profile already exists ──
+  const { data: guestProfile, isLoading: isCheckingGuest } = useQuery({
+    queryKey: ["check-guest"],
+    queryFn: () => apiRequest<any>("/guests/me"),
+    enabled: session?.user?.role === "guest",
+    retry: false,
+  });
+
+  // ── Query to get user profile if page is refreshed to get phone ──
+  const { data: userProfile } = useQuery<any>({
+    queryKey: ["user-profile", session?.user?.userId],
+    queryFn: () => apiRequest(`/users/${session?.user?.userId}`),
+    enabled: !!session?.user?.userId,
+  });
+
+  // If phone is empty but userProfile has it, set it
+  useEffect(() => {
+    if (!phone && userProfile?.phone) {
+      setPhone(userProfile.phone);
+    }
+  }, [phone, userProfile]);
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.replace("/signup");
+      return;
+    }
+
+    if (session?.user?.role === "owner") {
+      if (ownerProperty) {
+        router.replace("/dashboard");
+      } else if (!isCheckingProperty) {
+        setStep("owner-build");
+      }
+    } else if (session?.user?.role === "guest") {
+      if (guestProfile) {
+        router.replace("/tenancy");
+      } else if (!isCheckingGuest) {
+        setStep("guest-tenancy");
+      }
+    }
+  }, [
+    session,
+    status,
+    ownerProperty,
+    isCheckingProperty,
+    guestProfile,
+    isCheckingGuest,
+    router,
+  ]);
 
   // ─── Step 1: Set role ──────────────────────────────────────────────────────
   const handleRoleSubmit = async () => {
@@ -123,7 +218,7 @@ export default function OnboardingPage() {
         {
           method: "PATCH",
           body: JSON.stringify({ role, phone }),
-        }
+        },
       );
       const res = await fetch(url, options);
       if (!res.ok) throw new Error("Failed to update role");
@@ -149,13 +244,17 @@ export default function OnboardingPage() {
     setRooms((prev) => [...prev, { roomNumber: "", floor: 1, bedCount: 1 }]);
   const removeRoom = (i: number) =>
     setRooms((prev) => prev.filter((_, idx) => idx !== i));
-  const updateRoom = (i: number, field: keyof RoomEntry, value: string | number) =>
+  const updateRoom = (
+    i: number,
+    field: keyof RoomEntry,
+    value: string | number,
+  ) =>
     setRooms((prev) =>
-      prev.map((r, idx) => (idx === i ? { ...r, [field]: value } : r))
+      prev.map((r, idx) => (idx === i ? { ...r, [field]: value } : r)),
     );
   const updatePricing = (i: number, value: number) =>
     setPricing((prev) =>
-      prev.map((p, idx) => (idx === i ? { ...p, rentAmount: value } : p))
+      prev.map((p, idx) => (idx === i ? { ...p, rentAmount: value } : p)),
     );
 
   const handleBuildProperty = async () => {
@@ -181,7 +280,7 @@ export default function OnboardingPage() {
       });
       const res = await fetch(url, options);
       if (!res.ok) throw new Error("Failed to build property");
-      router.push("/");
+      router.push("/dashboard");
     } catch (err) {
       setBuildError("Something went wrong. Please try again.");
     } finally {
@@ -191,7 +290,12 @@ export default function OnboardingPage() {
 
   // ─── Guest: Register tenancy ───────────────────────────────────────────────
   const handleRegisterTenancy = async () => {
-    if (!selectedPropertyId || !selectedRoomId || !selectedBedId || !startDate) {
+    if (
+      !selectedPropertyId ||
+      !selectedRoomId ||
+      !selectedBedId ||
+      !startDate
+    ) {
       setTenancyError("Please fill all fields.");
       return;
     }
@@ -200,20 +304,23 @@ export default function OnboardingPage() {
     try {
       const userId = session?.user?.userId;
 
-      // 1. Register as guest
-      const { url: guestUrl, options: guestOptions } = await generalFunctions.createRequest(
-        "/guests",
-        {
+      // 1. Register as guest (idempotent — if already exists, backend returns existing)
+      const { url: guestUrl, options: guestOptions } =
+        await generalFunctions.createRequest("/guests", {
           method: "POST",
           body: JSON.stringify({ phone }),
-        }
-      );
-      await fetch(guestUrl, guestOptions);
+        });
+      const guestRes = await fetch(guestUrl, guestOptions);
+      if (!guestRes.ok) {
+        const err = await guestRes
+          .json()
+          .catch(() => ({ message: "Failed to create guest profile" }));
+        throw new Error(err.message ?? "Failed to create guest profile");
+      }
 
       // 2. Register tenancy
-      const { url: tenancyUrl, options: tenancyOptions } = await generalFunctions.createRequest(
-        "/tenancies/register",
-        {
+      const { url: tenancyUrl, options: tenancyOptions } =
+        await generalFunctions.createRequest("/tenancies/register", {
           method: "POST",
           body: JSON.stringify({
             propertyId: selectedPropertyId,
@@ -221,8 +328,7 @@ export default function OnboardingPage() {
             bedId: selectedBedId,
             startDate,
           }),
-        }
-      );
+        });
       const res = await fetch(tenancyUrl, tenancyOptions);
       if (!res.ok) {
         const err = await res.json();
@@ -230,15 +336,38 @@ export default function OnboardingPage() {
       }
       router.push("/tenancy");
     } catch (err: any) {
-      setTenancyError(err?.message ?? "Something went wrong. Please try again.");
+      setTenancyError(
+        err?.message ?? "Something went wrong. Please try again.",
+      );
     } finally {
       setIsRegisteringTenancy(false);
     }
   };
 
-  // ─────────────────────────────────────────────────────────────────────────── 
+  // ───────────────────────────────────────────────────────────────────────────
   // RENDER
-  // ─────────────────────────────────────────────────────────────────────────── 
+  // ───────────────────────────────────────────────────────────────────────────
+
+  // Block render while session is loading or we're mid-redirect (already has role)
+const isChecking =
+  status === "loading" ||
+  !session ||
+  (session?.user?.role === "owner" && isCheckingProperty) ||
+  (session?.user?.role === "guest" && isCheckingGuest) ||
+  (session?.user?.role === "guest" && !!guestProfile);
+
+  if (isChecking) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-sm text-muted-foreground">
+            Checking your account…
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative min-h-screen flex items-center justify-center px-4 overflow-hidden">
@@ -255,19 +384,26 @@ export default function OnboardingPage() {
             <Building2 className="h-7 w-7" />
           </div>
           <h1 className="text-3xl font-bold tracking-tight">PG Khata</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Let's set up your account</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Let's set up your account
+          </p>
         </div>
 
         {/* Step indicators */}
         <div className="mb-6 flex justify-center gap-2">
           <StepDot active={step === "role"} done={step !== "role"} />
-          <StepDot active={step === "owner-build" || step === "guest-tenancy"} done={false} />
+          <StepDot
+            active={step === "owner-build" || step === "guest-tenancy"}
+            done={false}
+          />
         </div>
 
         {/* ── Step 1: Role + Phone ── */}
         {step === "role" && (
           <div className="rounded-2xl border bg-card p-8 shadow-xl">
-            <h2 className="text-xl font-semibold mb-1">How will you use PG Khata?</h2>
+            <h2 className="text-xl font-semibold mb-1">
+              How will you use PG Khata?
+            </h2>
             <p className="text-sm text-muted-foreground mb-6">
               Choose your role. You can't change this later.
             </p>
@@ -282,9 +418,13 @@ export default function OnboardingPage() {
                     : "border-border"
                 }`}
               >
-                <div className={`flex h-12 w-12 items-center justify-center rounded-xl transition-colors ${
-                  role === "owner" ? "bg-primary text-primary-foreground" : "bg-muted"
-                }`}>
+                <div
+                  className={`flex h-12 w-12 items-center justify-center rounded-xl transition-colors ${
+                    role === "owner"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted"
+                  }`}
+                >
                   <Building2 className="h-6 w-6" />
                 </div>
                 <div className="text-center">
@@ -307,9 +447,13 @@ export default function OnboardingPage() {
                     : "border-border"
                 }`}
               >
-                <div className={`flex h-12 w-12 items-center justify-center rounded-xl transition-colors ${
-                  role === "guest" ? "bg-primary text-primary-foreground" : "bg-muted"
-                }`}>
+                <div
+                  className={`flex h-12 w-12 items-center justify-center rounded-xl transition-colors ${
+                    role === "guest"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted"
+                  }`}
+                >
                   <Users className="h-6 w-6" />
                 </div>
                 <div className="text-center">
@@ -399,12 +543,16 @@ export default function OnboardingPage() {
                         {p.bedCount}-Sharing
                       </p>
                       <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">₹</span>
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">
+                          ₹
+                        </span>
                         <Input
                           type="number"
                           className="pl-6"
                           value={p.rentAmount}
-                          onChange={(e) => updatePricing(i, Number(e.target.value))}
+                          onChange={(e) =>
+                            updatePricing(i, Number(e.target.value))
+                          }
                         />
                       </div>
                     </div>
@@ -432,19 +580,27 @@ export default function OnboardingPage() {
                       className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center rounded-lg border bg-muted/30 px-3 py-2"
                     >
                       <div className="space-y-0.5">
-                        <p className="text-[10px] text-muted-foreground">Room No.</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          Room No.
+                        </p>
                         <Input
                           className="h-7 text-xs"
                           placeholder="101"
                           value={room.roomNumber}
-                          onChange={(e) => updateRoom(i, "roomNumber", e.target.value)}
+                          onChange={(e) =>
+                            updateRoom(i, "roomNumber", e.target.value)
+                          }
                         />
                       </div>
                       <div className="space-y-0.5">
-                        <p className="text-[10px] text-muted-foreground">Floor</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          Floor
+                        </p>
                         <Select
                           value={String(room.floor)}
-                          onValueChange={(v) => updateRoom(i, "floor", Number(v))}
+                          onValueChange={(v) =>
+                            updateRoom(i, "floor", Number(v))
+                          }
                         >
                           <SelectTrigger className="h-7 text-xs">
                             <SelectValue />
@@ -459,10 +615,14 @@ export default function OnboardingPage() {
                         </Select>
                       </div>
                       <div className="space-y-0.5">
-                        <p className="text-[10px] text-muted-foreground">Beds</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          Beds
+                        </p>
                         <Select
                           value={String(room.bedCount)}
-                          onValueChange={(v) => updateRoom(i, "bedCount", Number(v))}
+                          onValueChange={(v) =>
+                            updateRoom(i, "bedCount", Number(v))
+                          }
                         >
                           <SelectTrigger className="h-7 text-xs">
                             <SelectValue />
@@ -497,7 +657,9 @@ export default function OnboardingPage() {
                 disabled={isBuildingProperty}
                 onClick={handleBuildProperty}
               >
-                {isBuildingProperty ? "Creating..." : "Create Property & Continue"}
+                {isBuildingProperty
+                  ? "Creating..."
+                  : "Create Property & Continue"}
                 {!isBuildingProperty && <ChevronRight className="h-4 w-4" />}
               </Button>
             </div>
@@ -513,7 +675,9 @@ export default function OnboardingPage() {
             >
               <ArrowLeft className="h-3.5 w-3.5" /> Back
             </button>
-            <h2 className="text-xl font-semibold mb-1">Enter Your Tenancy Details</h2>
+            <h2 className="text-xl font-semibold mb-1">
+              Enter Your Tenancy Details
+            </h2>
             <p className="text-sm text-muted-foreground mb-6">
               Select your property, room, and bed from the available options.
             </p>
@@ -560,7 +724,13 @@ export default function OnboardingPage() {
                   disabled={!selectedPropertyId}
                 >
                   <SelectTrigger id="room-select">
-                    <SelectValue placeholder={selectedPropertyId ? "Select a room" : "Select a property first"} />
+                    <SelectValue
+                      placeholder={
+                        selectedPropertyId
+                          ? "Select a room"
+                          : "Select a property first"
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {fetchedRooms.length === 0 && (
@@ -570,7 +740,8 @@ export default function OnboardingPage() {
                     )}
                     {fetchedRooms.map((r) => (
                       <SelectItem key={r.roomId} value={r.roomId}>
-                        Room {r.roomNumber} — Floor {r.floor} ({r.bedCount - r.occupiedCount} beds free)
+                        Room {r.roomNumber} — Floor {r.floor} (
+                        {r.bedCount - r.occupiedCount} beds free)
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -586,7 +757,11 @@ export default function OnboardingPage() {
                   disabled={!selectedRoomId}
                 >
                   <SelectTrigger id="bed-select">
-                    <SelectValue placeholder={selectedRoomId ? "Select a bed" : "Select a room first"} />
+                    <SelectValue
+                      placeholder={
+                        selectedRoomId ? "Select a bed" : "Select a room first"
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {availableBeds.length === 0 && (
