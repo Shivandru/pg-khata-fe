@@ -203,70 +203,155 @@ export default function PaymentsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Payment Tracker</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Click any cell to update status. Rent is derived from room sharing type.
-        </p>
-      </div>
+  <div className="space-y-4">
+    <div>
+      <h2 className="text-lg font-semibold">Payment Tracker</h2>
+      <p className="text-sm text-muted-foreground">
+        Click any cell to update status. Rent is derived from room sharing type.
+      </p>
+    </div>
 
-      <Card className="rounded-xl border shadow-none overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-muted/40 z-10 min-w-[200px]">
-                  Guest
-                </th>
-                {months.map((m) => (
-                  <th key={m} className="text-left px-4 py-3 font-medium text-muted-foreground min-w-[140px]">
-                    {monthLabel(m)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {guests.length === 0 && (
-                <tr>
-                  <td colSpan={months.length + 1} className="text-center text-sm text-muted-foreground py-10">
-                    No active guests yet.
-                  </td>
-                </tr>
-              )}
-              {guests.map((g) => {
-                const rent = getRentForGuest(g.guestId);
-                return (
-                  <tr key={g.guestId} className="border-t">
-                    <td className="px-4 py-3 sticky left-0 bg-background">
-                      <div className="font-medium">{g.name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {rent > 0 ? `₹${rent.toLocaleString("en-IN")}/mo` : "Rent not set"}
-                      </div>
-                    </td>
+    {/* Mobile */}
+    <div className="space-y-3 md:hidden">
+      {guests.length === 0 ? (
+        <Card className="rounded-xl border shadow-none">
+          <div className="py-10 text-center text-sm text-muted-foreground">
+            No active guests yet.
+          </div>
+        </Card>
+      ) : (
+        guests.map((g) => {
+          const rent = getRentForGuest(g.guestId);
+
+          return (
+            <Card
+              key={g.guestId}
+              className="rounded-xl border shadow-none overflow-hidden"
+            >
+              <div className="p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-medium truncate">{g.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {rent > 0
+                        ? `₹${rent.toLocaleString("en-IN")}/mo`
+                        : "Rent not set"}
+                    </p>
+                  </div>
+
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    Payments
+                  </span>
+                </div>
+
+                <div className="mt-4 -mx-4 overflow-x-auto px-4">
+                  <div className="flex min-w-max gap-4">
                     {months.map((m) => {
                       const rec = getPayment(g.guestId, m);
+
                       return (
-                        <td key={m} className="px-4 py-3">
+                        <div
+                          key={m}
+                          className="flex min-w-[52px] flex-col items-center gap-2"
+                        >
+                          <span className="text-[11px] font-medium text-muted-foreground">
+                            {monthLabel(m)}
+                          </span>
+
                           <PaymentCell
                             rent={rent}
                             record={rec}
-                            onSave={(s, a) => updatePayment(g.guestId, m, s, a)}
+                            onSave={(s, a) =>
+                              updatePayment(g.guestId, m, s, a)
+                            }
                           />
-                        </td>
+                        </div>
                       );
                     })}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      <p className="text-xs text-center text-muted-foreground">
-        Payment status is tracked locally for this session. Persistent payment records are coming soon.
-      </p>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          );
+        })
+      )}
     </div>
-  );
+
+    {/* Desktop */}
+    <Card className="hidden md:block rounded-xl border shadow-none overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/40">
+            <tr>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-muted/40 z-10 min-w-[200px]">
+                Guest
+              </th>
+
+              {months.map((m) => (
+                <th
+                  key={m}
+                  className="text-left px-4 py-3 font-medium text-muted-foreground min-w-[140px]"
+                >
+                  {monthLabel(m)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+
+          <tbody>
+            {guests.length === 0 && (
+              <tr>
+                <td
+                  colSpan={months.length + 1}
+                  className="text-center text-sm text-muted-foreground py-10"
+                >
+                  No active guests yet.
+                </td>
+              </tr>
+            )}
+
+            {guests.map((g) => {
+              const rent = getRentForGuest(g.guestId);
+
+              return (
+                <tr key={g.guestId} className="border-t">
+                  <td className="px-4 py-3 sticky left-0 bg-background">
+                    <div className="font-medium">{g.name}</div>
+
+                    <div className="text-xs text-muted-foreground">
+                      {rent > 0
+                        ? `₹${rent.toLocaleString("en-IN")}/mo`
+                        : "Rent not set"}
+                    </div>
+                  </td>
+
+                  {months.map((m) => {
+                    const rec = getPayment(g.guestId, m);
+
+                    return (
+                      <td key={m} className="px-4 py-3">
+                        <PaymentCell
+                          rent={rent}
+                          record={rec}
+                          onSave={(s, a) =>
+                            updatePayment(g.guestId, m, s, a)
+                          }
+                        />
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+
+    <p className="text-xs text-center text-muted-foreground">
+      Payment status is tracked locally for this session. Persistent payment
+      records are coming soon.
+    </p>
+  </div>
+);
 }

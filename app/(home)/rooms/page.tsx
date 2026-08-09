@@ -60,7 +60,7 @@ export default function RoomsPage() {
   const [roomOpen, setRoomOpen] = useState(false);
   const [bedOpen, setBedOpen] = useState(false);
   const [roomForm, setRoomForm] = useState({ roomNumber: "", floor: "1", bedCount: "2" });
-  const [bedForm, setBedForm] = useState({ roomId: "", label: "" });
+  const [bedForm, setBedForm] = useState({ roomId: "" });
 
   // ── Fetch owner's property ──────────────────────────────────────────────────
   const { data: property, isLoading: loadingProp } = useQuery<Property | null>({
@@ -93,7 +93,7 @@ export default function RoomsPage() {
   // ── Add room mutation ───────────────────────────────────────────────────────
   const addRoomMutation = useMutation({
     mutationFn: () =>
-      api(`/properties/${pid}/rooms`, {
+      api(`/room-setup/${pid}`, {
         method: "POST",
         body: JSON.stringify({
           roomNumber: roomForm.roomNumber,
@@ -111,13 +111,13 @@ export default function RoomsPage() {
   // ── Add bed mutation ────────────────────────────────────────────────────────
   const addBedMutation = useMutation({
     mutationFn: () =>
-      api(`/properties/${pid}/rooms/${bedForm.roomId}/beds`, {
+      api(`/bed-setup/${pid}/rooms/${bedForm.roomId}`, {
         method: "POST",
-        body: JSON.stringify({ label: bedForm.label }),
+        body: JSON.stringify({ }),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["all-beds", pid] });
-      setBedForm({ roomId: "", label: "" });
+      setBedForm({ roomId: "" });
       setBedOpen(false);
     },
   });
@@ -174,21 +174,13 @@ export default function RoomsPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1.5">
-                  <Label>Bed label</Label>
-                  <Input
-                    placeholder="A"
-                    value={bedForm.label}
-                    onChange={(e) => setBedForm({ ...bedForm, label: e.target.value })}
-                  />
-                </div>
                 {addBedMutation.error && (
                   <p className="text-xs text-destructive">{(addBedMutation.error as Error).message}</p>
                 )}
               </div>
               <DialogFooter>
                 <Button
-                  disabled={!bedForm.roomId || !bedForm.label || addBedMutation.isPending}
+                  disabled={!bedForm.roomId || addBedMutation.isPending}
                   onClick={() => addBedMutation.mutate()}
                 >
                   {addBedMutation.isPending ? "Adding…" : "Add bed"}

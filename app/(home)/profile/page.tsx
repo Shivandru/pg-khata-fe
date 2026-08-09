@@ -5,13 +5,34 @@ import { useQuery } from "@tanstack/react-query";
 import { generalFunctions } from "@/lib/generalFunctions";
 import { User, Mail, Phone, Shield } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import Image from "next/image";
+
+interface User {
+  userId: string;
+  name: string;
+  email: string;
+  provider: "google";
+  role: "owner" | "guest" | null;
+  phone?: string;
+  avatar?: string | null;
+}
 
 interface GuestProfile {
   guestId: string;
   userId: string;
-  name: string;
-  email: string;
-  phone: string;
+  kycInfo: Record<string, unknown>;
+}
+
+interface OwnerProfile {
+  ownerId: string;
+  userId: string;
+  kycInfo: Record<string, unknown>;
+  bankDetails: Record<string, unknown>;
+}
+
+interface ProfileResponse extends User {
+  guestProfile?: GuestProfile;
+  ownerProfile?: OwnerProfile;
 }
 
 async function apiGet<T>(path: string): Promise<T> {
@@ -46,20 +67,20 @@ function ProfileField({
 export default function ProfilePage() {
   const { data: session } = useSession();
 
-  const { data: guest, isLoading } = useQuery<GuestProfile>({
-    queryKey: ["guest-me"],
-    queryFn: () => apiGet("/guests/me"),
-    enabled: !!session?.accessToken,
-  });
+const { data: profile, isLoading } = useQuery<ProfileResponse>({
+  queryKey: ["profile-me"],
+  queryFn: () => apiGet("/profile/me"),
+  enabled: !!session?.accessToken,
+});
 
   const role = session?.user?.role ?? "—";
-  const avatarUrl = session?.user?.image ?? null;
-  const avatarInitials = (guest?.name ?? session?.user?.name ?? "?")
-    .split(" ")
-    .slice(0, 2)
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase();
+  const avatarUrl = profile?.avatar ?? null;
+const avatarInitials = (profile?.name ?? "?")
+  .split(" ")
+  .slice(0, 2)
+  .map((n) => n[0])
+  .join("")
+  .toUpperCase();
 
   if (isLoading) {
     return (
@@ -83,16 +104,28 @@ export default function ProfilePage() {
       <Card className="rounded-xl border shadow-none overflow-hidden">
         <div className="bg-gradient-to-r from-primary/20 via-primary/10 to-transparent h-20" />
         <div className="px-6 pb-6 -mt-10">
-          <div className="inline-flex h-20 w-20 items-center justify-center rounded-full overflow-hidden bg-primary text-primary-foreground text-2xl font-bold shadow-lg ring-4 ring-background">
+          {/* <div className="inline-flex h-20 w-20 items-center justify-center rounded-full overflow-hidden bg-primary text-primary-foreground text-2xl font-bold shadow-lg ring-4 ring-background">
             {avatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={avatarUrl} alt={avatarInitials} className="h-full w-full object-cover" />
+              <Image src={avatarUrl} alt={avatarInitials} className="h-full w-full object-cover" />
             ) : (
               <span>{avatarInitials}</span>
             )}
-          </div>
+          </div> */}
+          <div className="relative h-24 w-24 overflow-hidden rounded-full shadow-lg ring-4 ring-background">
+  {avatarUrl ? (
+    <Image
+      src={avatarUrl}
+      alt={avatarInitials}
+      fill
+      className="object-cover"
+    />
+  ) : (
+    <span>{avatarInitials}</span>
+  )}
+</div>
           <div className="mt-3">
-            <h2 className="text-xl font-bold">{guest?.name ?? session?.user?.name}</h2>
+            <h2 className="text-xl font-bold">{profile?.name ?? session?.user?.name}</h2>
             <span className="inline-flex items-center gap-1 mt-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary capitalize">
               <Shield className="h-3 w-3" />
               {role}
@@ -106,18 +139,18 @@ export default function ProfilePage() {
         <ProfileField
           icon={<User className="h-5 w-5" />}
           label="Full Name"
-          value={guest?.name ?? session?.user?.name ?? "—"}
+          value={profile?.name ?? session?.user?.name ?? "—"}
         />
         <ProfileField
           icon={<Mail className="h-5 w-5" />}
           label="Email"
-          value={guest?.email ?? session?.user?.email ?? "—"}
+          value={profile?.email ?? session?.user?.email ?? "—"}
         />
-        {guest?.phone && (
+        {profile?.phone && (
           <ProfileField
             icon={<Phone className="h-5 w-5" />}
             label="Phone"
-            value={guest.phone}
+            value={profile.phone}
           />
         )}
         <ProfileField

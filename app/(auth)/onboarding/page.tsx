@@ -228,8 +228,34 @@ export default function OnboardingPage() {
       await updateSession({ accessToken: data.token, role: data.user.role });
 
       if (role === "owner") {
+        // Register as owner (idempotent — if already exists, backend returns existing)
+        const { url: ownerUrl, options: ownerOptions } =
+          await generalFunctions.createRequest("/owner", {
+            method: "POST",
+            body: JSON.stringify({}),
+          });
+        const guestRes = await fetch(ownerUrl, ownerOptions);
+        if (!guestRes.ok) {
+          const err = await guestRes
+            .json()
+            .catch(() => ({ message: "Failed to create guest profile" }));
+          throw new Error(err.message ?? "Failed to create guest profile");
+        }
         setStep("owner-build");
       } else {
+        // Register as guest (idempotent — if already exists, backend returns existing)
+        const { url: guestUrl, options: guestOptions } =
+          await generalFunctions.createRequest("/guests", {
+            method: "POST",
+            body: JSON.stringify({}),
+          });
+        const guestRes = await fetch(guestUrl, guestOptions);
+        if (!guestRes.ok) {
+          const err = await guestRes
+            .json()
+            .catch(() => ({ message: "Failed to create guest profile" }));
+          throw new Error(err.message ?? "Failed to create guest profile");
+        }
         setStep("guest-tenancy");
       }
     } catch (err) {
@@ -302,23 +328,7 @@ export default function OnboardingPage() {
     setTenancyError("");
     setIsRegisteringTenancy(true);
     try {
-      const userId = session?.user?.userId;
-
-      // 1. Register as guest (idempotent — if already exists, backend returns existing)
-      const { url: guestUrl, options: guestOptions } =
-        await generalFunctions.createRequest("/guests", {
-          method: "POST",
-          body: JSON.stringify({ phone }),
-        });
-      const guestRes = await fetch(guestUrl, guestOptions);
-      if (!guestRes.ok) {
-        const err = await guestRes
-          .json()
-          .catch(() => ({ message: "Failed to create guest profile" }));
-        throw new Error(err.message ?? "Failed to create guest profile");
-      }
-
-      // 2. Register tenancy
+      // Register tenancy
       const { url: tenancyUrl, options: tenancyOptions } =
         await generalFunctions.createRequest("/tenancies/register", {
           method: "POST",
@@ -349,12 +359,12 @@ export default function OnboardingPage() {
   // ───────────────────────────────────────────────────────────────────────────
 
   // Block render while session is loading or we're mid-redirect (already has role)
-const isChecking =
-  status === "loading" ||
-  !session ||
-  (session?.user?.role === "owner" && isCheckingProperty) ||
-  (session?.user?.role === "guest" && isCheckingGuest) ||
-  (session?.user?.role === "guest" && !!guestProfile);
+  const isChecking =
+    status === "loading" ||
+    !session ||
+    (session?.user?.role === "owner" && isCheckingProperty) ||
+    (session?.user?.role === "guest" && isCheckingGuest) ||
+    (session?.user?.role === "guest" && !!guestProfile);
 
   if (isChecking) {
     return (

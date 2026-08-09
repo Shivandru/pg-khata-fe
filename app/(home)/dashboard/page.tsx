@@ -136,7 +136,7 @@ export default function DashboardPage() {
               {guests.slice(0, 5).map((g) => (
                 <div key={g.guestId} className="flex items-center gap-4 px-5 py-3">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-semibold">
-                    {g.name.charAt(0).toUpperCase()}
+                    {g?.name?.charAt(0).toUpperCase()}
                   </div>
                   <div>
                     <p className="text-sm font-medium">{g.name}</p>
