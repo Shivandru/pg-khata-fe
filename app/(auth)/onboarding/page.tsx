@@ -511,12 +511,12 @@ export default function OnboardingPage() {
         {/* ── Step 2a: Owner — Build Property ── */}
         {step === "owner-build" && (
           <div className="rounded-2xl border bg-card p-8 shadow-xl">
-            <button
+            {/* <button
               onClick={() => setStep("role")}
               className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors"
             >
               <ArrowLeft className="h-3.5 w-3.5" /> Back
-            </button>
+            </button> */}
             <h2 className="text-xl font-semibold mb-1">Build Your Property</h2>
             <p className="text-sm text-muted-foreground mb-6">
               Set up your PG — name, pricing, floors and rooms.
