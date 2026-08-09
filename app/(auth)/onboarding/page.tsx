@@ -679,12 +679,12 @@ export default function OnboardingPage() {
         {/* ── Step 2b: Guest — Tenancy Details ── */}
         {step === "guest-tenancy" && (
           <div className="rounded-2xl border bg-card p-8 shadow-xl">
-            <button
+            {/* <button
               onClick={() => setStep("role")}
               className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors"
             >
               <ArrowLeft className="h-3.5 w-3.5" /> Back
-            </button>
+            </button> */}
             <h2 className="text-xl font-semibold mb-1">
               Enter Your Tenancy Details
             </h2>
