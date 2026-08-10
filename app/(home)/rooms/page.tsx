@@ -29,6 +29,11 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Plus, BedDouble, AlertCircle } from "lucide-react";
+import {
+  OwnerBuildStep,
+  type PricingEntry,
+  type RoomEntry,
+} from "@/components/onboarding/OwnerBuildStep";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Property { propertyId: string; name: string; }
@@ -62,6 +67,36 @@ export default function RoomsPage() {
   const [roomForm, setRoomForm] = useState({ roomNumber: "", floor: "1", bedCount: "2" });
   const [bedForm, setBedForm] = useState({ roomId: "" });
 
+  const [propertyName, setPropertyName] = useState("");
+  const [propertyAddress, setPropertyAddress] = useState("");
+  const [pricing, setPricing] = useState<PricingEntry[]>([
+    { bedCount: 1, rentAmount: 15000 },
+    { bedCount: 2, rentAmount: 8000 },
+    { bedCount: 3, rentAmount: 7000 },
+    { bedCount: 4, rentAmount: 6000 },
+  ]);
+  const [roomsDraft, setRoomsDraft] = useState<RoomEntry[]>([
+    { roomNumber: "101", floor: 1, bedCount: 2 },
+  ]);
+  const [buildError, setBuildError] = useState("");
+
+  const addDraftRoom = () =>
+    setRoomsDraft((prev) => [...prev, { roomNumber: "", floor: 1, bedCount: 1 }]);
+  const removeDraftRoom = (index: number) =>
+    setRoomsDraft((prev) => prev.filter((_, idx) => idx !== index));
+  const updateDraftRoom = (
+    index: number,
+    field: keyof RoomEntry,
+    value: string | number,
+  ) =>
+    setRoomsDraft((prev) =>
+      prev.map((r, idx) => (idx === index ? { ...r, [field]: value } : r)),
+    );
+  const updatePricing = (index: number, value: number) =>
+    setPricing((prev) =>
+      prev.map((p, idx) => (idx === index ? { ...p, rentAmount: value } : p)),
+    );
+
   // ── Fetch owner's property ──────────────────────────────────────────────────
   const { data: property, isLoading: loadingProp } = useQuery<Property | null>({
     queryKey: ["owner-property"],
@@ -88,6 +123,32 @@ export default function RoomsPage() {
       return results.flat();
     },
     enabled: !!pid && rooms.length > 0,
+  });
+
+  const buildPropertyMutation = useMutation({
+    mutationFn: async () => {
+      if (!propertyName.trim() || !propertyAddress.trim()) {
+        throw new Error("Property name and address are required.");
+      }
+      if (roomsDraft.some((r) => !r.roomNumber.trim())) {
+        throw new Error("All rooms must have a room number.");
+      }
+      const { url, options } = await generalFunctions.createRequest("/build", {
+        method: "POST",
+        body: JSON.stringify({
+          name: propertyName,
+          address: propertyAddress,
+          pricing,
+          rooms: roomsDraft,
+        }),
+      });
+      const res = await fetch(url, options);
+      if (!res.ok) throw new Error("Failed to build property");
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["owner-property"] }),
+    onError: (err) =>
+      setBuildError((err as Error).message ?? "Something went wrong."),
   });
 
   // ── Add room mutation ───────────────────────────────────────────────────────
@@ -135,10 +196,46 @@ export default function RoomsPage() {
 
   if (!property) {
     return (
-      <div className="flex h-64 flex-col items-center justify-center gap-3 text-center">
-        <AlertCircle className="h-8 w-8 text-muted-foreground" />
-        <p className="font-medium">No property found</p>
-        <p className="text-sm text-muted-foreground">Complete the onboarding setup first.</p>
+      <div className="space-y-6">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Rooms & Beds</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              No property found. Create your first property to continue.
+            </p>
+          </div>
+        </div>
+
+        <Card className="rounded-xl border shadow-none p-6">
+          <div className="flex items-start gap-3 mb-6">
+            <AlertCircle className="h-5 w-5 text-muted-foreground mt-0.5" />
+            <div>
+              <p className="font-medium">Property setup required</p>
+              <p className="text-sm text-muted-foreground">
+                You can create your property here anytime from the sidebar.
+              </p>
+            </div>
+          </div>
+
+          <OwnerBuildStep
+            propertyName={propertyName}
+            setPropertyName={setPropertyName}
+            propertyAddress={propertyAddress}
+            setPropertyAddress={setPropertyAddress}
+            pricing={pricing}
+            updatePricing={updatePricing}
+            rooms={roomsDraft}
+            addRoom={addDraftRoom}
+            removeRoom={removeDraftRoom}
+            updateRoom={updateDraftRoom}
+            buildError={buildError}
+            isBuilding={buildPropertyMutation.isPending}
+            onSubmit={() => {
+              setBuildError("");
+              buildPropertyMutation.mutate();
+            }}
+          />
+        </Card>
       </div>
     );
   }

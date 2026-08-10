@@ -4,6 +4,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
+import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 
 const OWNER_ONLY_PATHS = ["/", "/dashboard", "/rooms", "/guest", "/payments"];
 const GUEST_DEFAULT = "/tenancy";
@@ -22,6 +23,7 @@ function FullPageSpinner() {
 
 export default function HomeLayout({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
+  const { isChecking: onboardingChecking, isComplete: onboardingComplete } = useOnboardingStatus();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -32,16 +34,22 @@ export default function HomeLayout({ children }: { children: React.ReactNode }) 
     const role = session?.user?.role;
     if (role === null || role === undefined) { router.replace("/onboarding"); return; }
 
+    if (!onboardingChecking && !onboardingComplete) {
+      const target = role === "owner" ? "/rooms" : "/tenancy";
+      if (pathname !== target) router.replace(target);
+      return;
+    }
+
     if (role === "guest") {
       const blocked = OWNER_ONLY_PATHS.some(
         (p) => p === "/" ? pathname === "/" : pathname.startsWith(p)
       );
       if (blocked) router.replace(GUEST_DEFAULT);
     }
-  }, [status, session, pathname, router]);
+  }, [status, session, pathname, router, onboardingChecking, onboardingComplete]);
 
   // Block render until we know the session — prevents any flash
-  if (status === "loading" || !session || !session.user?.role) return <FullPageSpinner />;
+  if (status === "loading" || !session || !session.user?.role || onboardingChecking) return <FullPageSpinner />;
 
   return (
     <SidebarProvider>

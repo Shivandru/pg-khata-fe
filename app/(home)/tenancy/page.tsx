@@ -1,10 +1,19 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
 import { generalFunctions } from "@/lib/generalFunctions";
 import { Building2, DoorOpen, BedDouble, CalendarDays, IndianRupee } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { useMutation } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
+import {
+  GuestTenancyStep,
+  type BedOption,
+  type PropertyOption,
+  type RoomOption,
+} from "@/components/onboarding/GuestTenancyStep";
 
 interface Tenancy {
   tenancyId: string;
@@ -33,11 +42,19 @@ interface Bed {
   bedId: string;
   label: string;
 }
+interface RoomWithOccupancy extends RoomOption {}
+interface BedWithOccupied {
+  bedId: string;
+  label: string;
+  isOccupied: boolean;
+}
 
 async function apiGet<T>(path: string): Promise<T> {
   const { url, options } = await generalFunctions.createRequest(path);
   const res = await fetch(url, options);
-  if (!res.ok) throw new Error("Request failed");
+  // Treat missing resources as "no data" for onboarding/setup flows.
+  // Backend returns 404 when the user has no tenancy yet.
+  if (!res.ok) return null as T;
   return res.json();
 }
 
@@ -65,11 +82,118 @@ function InfoTile({
 
 export default function TenancyPage() {
   const { data: session } = useSession();
+  const queryClient = useQueryClient();
+  const router = useRouter();
 
   const { data: tenancy, isLoading, isError } = useQuery<Tenancy | null>({
     queryKey: ["tenancy-me"],
     queryFn: () => apiGet("/tenancies/me"),
     enabled: !!session?.accessToken,
+    retry: false,
+  });
+
+  const [selectedPropertyId, setSelectedPropertyId] = useState("");
+  const [selectedRoomId, setSelectedRoomId] = useState("");
+  const [selectedBedId, setSelectedBedId] = useState("");
+  const [startDate, setStartDate] = useState(
+    new Date().toISOString().slice(0, 10),
+  );
+  const [tenancyError, setTenancyError] = useState("");
+  const [tenancyInfo, setTenancyInfo] = useState("");
+
+  const { data: properties = [] } = useQuery<PropertyOption[]>({
+    queryKey: ["properties"],
+    queryFn: () => apiGet("/properties"),
+    enabled: !!session?.accessToken && (!tenancy || isError),
+  });
+
+  const { data: rooms = [] } = useQuery<RoomWithOccupancy[]>({
+    queryKey: ["rooms", selectedPropertyId],
+    queryFn: () => apiGet(`/properties/${selectedPropertyId}/rooms`),
+    enabled: !!session?.accessToken && !!selectedPropertyId && (!tenancy || isError),
+  });
+
+  const { data: beds = [] } = useQuery<BedWithOccupied[]>({
+    queryKey: ["beds", selectedPropertyId, selectedRoomId],
+    queryFn: () =>
+      apiGet(`/properties/${selectedPropertyId}/rooms/${selectedRoomId}/beds`),
+    enabled:
+      !!session?.accessToken &&
+      !!selectedPropertyId &&
+      !!selectedRoomId &&
+      (!tenancy || isError),
+  });
+
+  const availableBeds: BedOption[] = beds
+    .filter((b) => !b.isOccupied)
+    .map((b) => ({ bedId: b.bedId, label: b.label }));
+
+    console.log({beds});
+    console.log({availableBeds});
+
+  const registerTenancy = useMutation({
+    mutationFn: async () => {
+      if (!selectedPropertyId || !selectedRoomId || !selectedBedId || !startDate) {
+        throw new Error("Please fill all fields.");
+      }
+
+      const payload = {
+        propertyId: selectedPropertyId,
+        roomId: selectedRoomId,
+        bedId: selectedBedId,
+        startDate,
+      };
+
+      const attemptRegister = async () => {
+        const { url, options } = await generalFunctions.createRequest(
+          "/tenancies/register",
+          { method: "POST", body: JSON.stringify(payload) },
+        );
+        return fetch(url, options);
+      };
+
+      let res = await attemptRegister();
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Request failed" }));
+
+        // Backend requires a guest profile; ensure it exists and retry once.
+        if (res.status === 404 && err?.message === "Guest profile not found.") {
+          const { url: guestUrl, options: guestOptions } =
+            await generalFunctions.createRequest("/guests", {
+              method: "POST",
+              body: JSON.stringify({}),
+            });
+          const guestRes = await fetch(guestUrl, guestOptions);
+          if (!guestRes.ok) {
+            const guestErr = await guestRes
+              .json()
+              .catch(() => ({ message: "Failed to create guest profile" }));
+            throw new Error(guestErr.message ?? "Failed to create guest profile");
+          }
+          res = await attemptRegister();
+          if (!res.ok) {
+            const err2 = await res
+              .json()
+              .catch(() => ({ message: "Request failed" }));
+            throw new Error(err2.message ?? "Failed to register tenancy");
+          }
+          return res.json();
+        }
+
+        throw new Error(err.message ?? "Failed to register tenancy");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      setTenancyError("");
+      setTenancyInfo(
+        "Tenancy registered. If you still see this form, your tenancy may not be active yet.",
+      );
+      queryClient.invalidateQueries({ queryKey: ["tenancy-me"] });
+      router.refresh();
+    },
+    onError: (err) =>
+      setTenancyError((err as Error).message ?? "Something went wrong."),
   });
 
   const { data: property } = useQuery<Property>({
@@ -109,12 +233,36 @@ export default function TenancyPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Tenancy Details</h1>
           <p className="text-sm text-muted-foreground mt-1">Your current living arrangement.</p>
         </div>
-        <Card className="flex flex-col items-center justify-center py-16 text-center rounded-xl border shadow-none">
-          <DoorOpen className="h-10 w-10 text-muted-foreground mb-3" />
-          <p className="font-medium">No active tenancy found</p>
-          <p className="text-sm text-muted-foreground mt-1">
-            You don't have an active tenancy yet. Please contact your property owner.
-          </p>
+        <Card className="rounded-xl border shadow-none p-6">
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <DoorOpen className="h-10 w-10 text-muted-foreground mb-3" />
+            <p className="font-medium">No active tenancy found</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Register your tenancy here anytime from the sidebar.
+            </p>
+          </div>
+
+          <GuestTenancyStep
+            properties={properties}
+            rooms={rooms as RoomOption[]}
+            availableBeds={availableBeds}
+            selectedPropertyId={selectedPropertyId}
+            setSelectedPropertyId={setSelectedPropertyId}
+            selectedRoomId={selectedRoomId}
+            setSelectedRoomId={setSelectedRoomId}
+            selectedBedId={selectedBedId}
+            setSelectedBedId={setSelectedBedId}
+            startDate={startDate}
+            setStartDate={setStartDate}
+            tenancyError={tenancyError}
+            tenancyInfo={tenancyInfo}
+            isRegistering={registerTenancy.isPending}
+            onSubmit={() => {
+              setTenancyError("");
+              setTenancyInfo("");
+              registerTenancy.mutate();
+            }}
+          />
         </Card>
       </div>
     );
